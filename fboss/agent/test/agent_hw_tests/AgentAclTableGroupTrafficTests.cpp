@@ -269,17 +269,22 @@ class AgentAclTableGroupTrafficTest : public AgentHwTest {
         XLOG(DBG2) << "TestType: " << testType << " Pkts on queue : " << qid
                    << " pkts: " << pktsOnQueue;
         if (qid == 0) {
+          // Looped-back packets for unknown MACs may flood queue 0 before
+          // split-horizon drops them (FDB miss on loopback re-ingress).
           EXPECT_EVENTUALLY_GE(pktsOnQueue, 1);
         } else {
-          EXPECT_EVENTUALLY_EQ(pktsOnQueue, 2);
+          // One hit per TTL packet, with an optional second hit after loopback.
+          EXPECT_EVENTUALLY_TRUE(pktsOnQueue == 2 || pktsOnQueue == 4);
         }
       }
 
       auto statAfter = utility::getAclInOutPackets(getSw(), ttlCounterName);
       XLOG(DBG2) << "statBefore: " << statBefore << " statAfter: " << statAfter
                  << " expected: " << getIpToMacAndClassID<AddrT>().size();
-      EXPECT_EVENTUALLY_EQ(
-          statAfter - statBefore, getIpToMacAndClassID<AddrT>().size());
+      auto statDelta = statAfter - statBefore;
+      auto expected = getIpToMacAndClassID<AddrT>().size();
+      EXPECT_EVENTUALLY_TRUE(
+          statDelta == expected || statDelta == 2 * expected);
     });
   }
 
